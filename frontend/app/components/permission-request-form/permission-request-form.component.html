@@ -136,12 +136,70 @@
               </div>
 
               <div class="Field">
-                <label class="Field__label" for="areas">
+                <label class="Field__label">
                   Zones géographiques
                 </label>
-                <pnx-areas id="areas" [typeCodes]="['COM', 'DEP', 'REG']" [parentFormControl]="areasControl"
-                  [defaultItems]="selectedAreasDefaultItems"
-                  (onSelectionChange)="onAreasSelectionChange($event)"></pnx-areas>
+
+                <div class="Field__radio Field__radio--area-mode">
+                  <label>
+                    <input type="radio" formControlName="area_mode" value="existing"
+                      (change)="onAreaModeChange('existing')" />
+                    Sélectionner une zone existante
+                  </label>
+                  <label>
+                    <input type="radio" formControlName="area_mode" value="custom"
+                      (change)="onAreaModeChange('custom')" />
+                    Charger un GeoJSON personnalisé
+                  </label>
+                </div>
+
+                <ng-container *ngIf="!isCustomAreaMode">
+                  <pnx-areas id="areas" [typeCodes]="['COM', 'DEP', 'REG']" [parentFormControl]="areasControl"
+                    [defaultItems]="selectedAreasDefaultItems"
+                    (onSelectionChange)="onAreasSelectionChange($event)"></pnx-areas>
+                </ng-container>
+
+                <ng-container *ngIf="isCustomAreaMode">
+                  <div class="Field Field--geojson">
+                    <div *ngIf="permissionRequest?.custom_area && !selectedGeoJsonFile" class="Field__currentFile">
+                      <mat-icon>place</mat-icon>
+                      Zone actuelle :
+                      <strong>{{ permissionRequest.custom_area.area_name || 'Sans nom' }}</strong>
+                      — cliquez ci-dessous pour remplacer le fichier.
+                    </div>
+
+                    <label class="Field__label" for="geojson_file">
+                      Fichier GeoJSON
+                      <span *ngIf="!permissionRequest?.custom_area">(obligatoire)</span>
+                    </label>
+                    <input
+                      id="geojson_file"
+                      type="file"
+                      accept=".geojson,.json"
+                      (change)="onGeoJsonFileChange($event)"
+                    />
+
+                    <div class="Field__error" *ngIf="geoJsonParseError">
+                      {{ geoJsonParseError }}
+                    </div>
+                    <div class="Field__success" *ngIf="parsedGeoJson && !geoJsonParseError">
+                      <mat-icon>check_circle</mat-icon>
+                      Fichier GeoJSON valide : {{ selectedGeoJsonFile?.name }}
+                    </div>
+
+                    <div class="Field">
+                      <label class="Field__label" for="custom_area_name">
+                        Nom de la zone (optionnel)
+                      </label>
+                      <input
+                        id="custom_area_name"
+                        type="text"
+                        formControlName="custom_area_name"
+                        placeholder="Ex. : Secteur nord de la Plaine des Cafres"
+                      />
+                    </div>
+                  </div>
+                </ng-container>
               </div>
             </div>
             <div class="Field Field--inline-check">
@@ -164,7 +222,7 @@
       Réinitialiser
     </button>
     <button type="submit" mat-flat-button color="primary"
-      [disabled]="form.invalid || form.pristine || isSaving || isSameAsPermissionRequest">
+      [disabled]="form.invalid || !isCustomAreaValid || form.pristine || isSaving || isSameAsPermissionRequest">
       Enregistrer
     </button>
   </div>

@@ -17,8 +17,8 @@ from geonature.utils.env import db
 from utils_flask_sqla.response import json_resp
 
 from . import MODULE_CODE
-from .models import PermissionRequest, SCOPE_USER, SCOPE_ORGANISM
-from .schemas import PermissionRequestSchema
+from .models import PermissionRequest, CustomArea, SCOPE_USER, SCOPE_ORGANISM
+from .schemas import PermissionRequestSchema, CustomAreaSchema
 from .status_utils import status_order_case, Status, status_filter_expression
 from .notifications_utils import PermissionRequestCodes
 from pypnusershub.db.models import User
@@ -134,6 +134,73 @@ def _get_validator_role_ids():
 
 def _build_role_recipient_ids(*role_ids):
     return _deduplicate_role_ids(role_ids)
+
+
+## ########################################################################
+## MAP DATA
+## ########################################################################
+
+
+@blueprint.route("/<int(signed=True):id_permission_request>/map-data", methods=["GET"])
+@login_required
+@permissions.check_cruved_scope("R", get_scope=True, module_code=MODULE_CODE)
+@json_resp
+def map_data(scope, id_permission_request):
+    query = PermissionRequest.filter_by_scope(scope)
+    permission_request = (
+        db.session.scalars(query.filter_by(id_permission_request=id_permission_request))
+        .unique()
+        .one_or_none()
+    )
+    if permission_request is None:
+        raise NotFound(f"Permission request {id_permission_request} not found")
+
+    if permission_request.custom_area is not None:
+        return permission_request.custom_area.geojson_data
+
+    areas = permission_request.permission.areas_filter if permission_request.permission else []
+    if not areas:
+        return {"type": "FeatureCollection", "features": []}
+
+    features = db.session.execute(
+        sa.text(
+            """
+            SELECT json_build_object(
+                'type', 'Feature',
+                'geometry', ST_AsGeoJSON(geom_4326)::json,
+                'properties', json_build_object('area_name', area_name, 'area_code', area_code)
+            )
+            FROM ref_geo.l_areas
+            WHERE id_area = ANY(:ids)
+            """
+        ),
+        {"ids": [area.id_area for area in areas]},
+    ).scalars().all()
+
+    return {"type": "FeatureCollection", "features": [f for f in features]}
+
+
+## ########################################################################
+## CUSTOM AREA PARSING
+## ########################################################################
+
+
+def _parse_custom_area(geojson: dict, area_name: str | None) -> CustomArea:
+    geojson_type = geojson.get("type")
+    if geojson_type == "FeatureCollection":
+        features = geojson.get("features", [])
+        if not features:
+            raise BadRequest("Le GeoJSON FeatureCollection ne contient aucune feature.")
+        if features[0].get("geometry") is None:
+            raise BadRequest("La première feature du GeoJSON ne contient pas de geometry.")
+    elif geojson_type == "Feature":
+        if geojson.get("geometry") is None:
+            raise BadRequest("Le GeoJSON Feature ne contient pas de geometry.")
+    elif geojson_type is None:
+        raise BadRequest("Le champ 'type' est absent du GeoJSON.")
+
+    area_name = area_name.strip() or None if isinstance(area_name, str) else area_name
+    return CustomArea(area_name=area_name, geojson_data=geojson)
 
 
 ## ########################################################################
@@ -407,6 +474,7 @@ def create_permission_request():
         "areas",
         "sensitivity_filter",
         "scope",
+        "custom_area",
     }
     unexpected_fields = set(payload.keys()) - allowed_fields
     if unexpected_fields:
@@ -540,11 +608,26 @@ def create_permission_request():
     created_on_value = datetime.combine(created_on, datetime.min.time())
     expire_on_value = datetime.combine(expiration_date, datetime.min.time())
 
+    custom_area_value = payload.get("custom_area")
+    custom_area = None
+    if custom_area_value is not None:
+        if not isinstance(custom_area_value, dict):
+            raise BadRequest("custom_area must be an object with a 'geojson' field.")
+        raw_geojson = custom_area_value.get("geojson")
+        if not isinstance(raw_geojson, dict):
+            raise BadRequest("custom_area.geojson is required and must be a GeoJSON object.")
+        raw_area_name = custom_area_value.get("area_name")
+        if raw_area_name is not None and not isinstance(raw_area_name, str):
+            raise BadRequest("custom_area.area_name must be a string or null.")
+        custom_area = _parse_custom_area(raw_geojson, raw_area_name)
+
     permission_request = PermissionRequest(
         id_author=current_user.id_role,
         id_validator=None,
         description=description_value,
     )
+    if custom_area is not None:
+        permission_request.custom_area = custom_area
 
     permission = Permission(
         id_role=permission_role_id,
@@ -614,6 +697,7 @@ def update_permission_request(scope, id_permission_request):
         "areas",
         "sensitivity_filter",
         "scope",
+        "custom_area",
     }
     if not allowed_fields.intersection(payload.keys()):
         raise BadRequest("No updatable fields were provided.")
@@ -741,6 +825,21 @@ def update_permission_request(scope, id_permission_request):
         permission_request.permission.areas_filter = [
             areas_by_id[area_id] for area_id in normalized_area_ids
         ]
+
+    if "custom_area" in payload:
+        custom_area_value = payload.get("custom_area")
+        if custom_area_value is None:
+            permission_request.custom_area = None
+        else:
+            if not isinstance(custom_area_value, dict):
+                raise BadRequest("custom_area must be an object with a 'geojson' field.")
+            raw_geojson = custom_area_value.get("geojson")
+            if not isinstance(raw_geojson, dict):
+                raise BadRequest("custom_area.geojson is required and must be a GeoJSON object.")
+            raw_area_name = custom_area_value.get("area_name")
+            if raw_area_name is not None and not isinstance(raw_area_name, str):
+                raise BadRequest("custom_area.area_name must be a string or null.")
+            permission_request.custom_area = _parse_custom_area(raw_geojson, raw_area_name)
 
     db.session.commit()
 

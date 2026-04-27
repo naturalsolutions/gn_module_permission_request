@@ -6,7 +6,7 @@ from ref_geo.models import LAreas
 
 from geonature.utils.schema import CruvedSchemaMixin
 
-from .models import PermissionRequest
+from .models import PermissionRequest, CustomArea
 from .status_utils import compute_status
 from . import MODULE_CODE
 
@@ -43,6 +43,18 @@ class PermissionRequestAreaSchema(SQLAlchemySchema):
     )
 
 
+class CustomAreaSchema(SQLAlchemySchema):
+    class Meta:
+        model = CustomArea
+        load_instance = False
+        include_fk = True
+
+    id_custom_area = auto_field()
+    id_permission_request = auto_field()
+    area_name = auto_field()
+    geojson_data = auto_field()
+
+
 class PermissionRequestSchema(CruvedSchemaMixin, SQLAlchemySchema):
     class Meta:
         model = PermissionRequest
@@ -70,6 +82,7 @@ class PermissionRequestSchema(CruvedSchemaMixin, SQLAlchemySchema):
         attribute="permission.areas_filter",
         dump_only=True,
     )
+    custom_area = fields.Nested(CustomAreaSchema, allow_none=True, dump_only=True)
     author = fields.Nested(PermissionRequestUserSchema, dump_only=True)
     validator = fields.Nested(PermissionRequestUserSchema, dump_only=True)
     status = fields.Method("get_status", dump_only=True)

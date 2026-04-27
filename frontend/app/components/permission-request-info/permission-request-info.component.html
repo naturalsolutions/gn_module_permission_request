@@ -111,6 +111,20 @@
           </ul>
         </div>
 
+        <div class="Field" *ngIf="permissionRequest.custom_area">
+          <label for="custom_area">Zone géographique personnalisée (GeoJSON)</label>
+          <div id="custom_area" class="PermissionRequestInfo__customArea">
+            <mat-icon>place</mat-icon>
+            {{ permissionRequest.custom_area.area_name || 'Sans nom' }}
+          </div>
+        </div>
+
+        <div class="Field Field--map" *ngIf="mapGeojson">
+          <pnx-map height="300px" [searchBar]="false">
+            <pnx-geojson [geojson]="mapGeojson" [zoomOnLayer]="true" [zoomOnFirstTime]="true"></pnx-geojson>
+          </pnx-map>
+        </div>
+
         <div class="Field Field--inline">
           <label for="sensitivity_filter">Données sensibles visibles</label>
           <div id="sensitivity_filter">

@@ -13,6 +13,7 @@ export interface PermissionRequest {
   validation_description: string | null;
   taxa: PermissionRequestTaxon[];
   areas: PermissionRequestArea[];
+  custom_area: PermissionRequestCustomArea | null;
   permissions: number[];
   status: STATUS | null;
   author: PermissionRequestRole | null;
@@ -34,6 +35,13 @@ export interface PermissionRequestArea {
   area_name: string;
   area_code: string | null;
   type_code: string | null;
+}
+
+export interface PermissionRequestCustomArea {
+  id_custom_area: number;
+  id_permission_request: number | null;
+  area_name: string | null;
+  geojson_data: object;
 }
 
 export enum PermissionRequestScope {
