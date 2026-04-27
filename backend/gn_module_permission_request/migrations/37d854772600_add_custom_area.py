@@ -30,7 +30,6 @@ def upgrade():
                     REFERENCES {SCHEMA_NAME}.{PERMISSION_REQUEST_TABLE}(id_permission_request)
                     ON DELETE CASCADE
                     UNIQUE,
-                area_name           VARCHAR(255),
                 geojson_data        JSONB NOT NULL
             )
             """

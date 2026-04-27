@@ -46,7 +46,6 @@ type PermissionRequestFormValue = {
   taxon_search: string | null;
   areas: number[];
   area_mode: AreaMode;
-  custom_area_name: string | null;
 };
 
 @Component({
@@ -129,11 +128,10 @@ export class PermissionRequestFormComponent {
       scope: [DEFAULT_SCOPE, [Validators.required]],
       sensitivity_filter: [true],
       acknowledgeTerms: [false],
-      taxa: [[], Validators.required],
+      taxa: [[]],
       taxon_search: [''],
       areas: [[]],
       area_mode: ['existing' as AreaMode],
-      custom_area_name: [null],
     });
   }
 
@@ -173,14 +171,6 @@ export class PermissionRequestFormComponent {
 
   onAreaModeChange(mode: AreaMode): void {
     this.form.get('area_mode')?.setValue(mode);
-    if (mode === 'existing') {
-      this.parsedGeoJson = null;
-      this.geoJsonParseError = null;
-      this.selectedGeoJsonFileName = null;
-    } else {
-      this.areasControl?.setValue([]);
-      this.selectedAreasDefaultItems = [];
-    }
     this.form.markAsDirty();
   }
 
@@ -199,11 +189,11 @@ export class PermissionRequestFormComponent {
         this.selectedGeoJsonFileName = file.name;
         this.form.markAsDirty();
       } catch {
-        this.geoJsonParseError = "Le fichier sélectionné n'est pas un GeoJSON valide.";
+        this.geoJsonParseError = 'Le GeoJSON fourni n\'est pas valide.';
       }
     };
     reader.onerror = () => {
-      this.geoJsonParseError = 'Impossible de lire le fichier.';
+      this.geoJsonParseError = 'Le GeoJSON fourni n\'est pas valide.';
     };
     reader.readAsText(file);
   }
@@ -215,12 +205,17 @@ export class PermissionRequestFormComponent {
     return this.parsedGeoJson !== null && this.geoJsonParseError === null;
   }
 
+  get isAreaValid(): boolean {
+    if (this.isCustomAreaMode) return this.isCustomAreaValid;
+    return (this._extractAreaIdentifiers(this.areasControl?.value).length > 0);
+  }
+
   // //////////////////////////////////////////////////////////////////////////
   // Submit
   // //////////////////////////////////////////////////////////////////////////
 
   onSubmit(): void {
-    if (this.form.invalid || !this.isCustomAreaValid) {
+    if (this.form.invalid || !this.isAreaValid) {
       this.form.markAllAsTouched();
       return;
     }
@@ -238,7 +233,7 @@ export class PermissionRequestFormComponent {
       areas: this.isCustomAreaMode ? [] : this._extractAreaIdentifiers(rawValue.areas),
       scope: rawValue.scope,
       sensitivity_filter: !!rawValue.sensitivity_filter,
-      custom_area: this._buildCustomAreaPayload(rawValue),
+      custom_area: this._buildCustomAreaPayload(),
     };
 
     const save$ = this.permissionRequest
@@ -259,17 +254,14 @@ export class PermissionRequestFormComponent {
       });
   }
 
-  private _buildCustomAreaPayload(rawValue: PermissionRequestFormValue) {
+  private _buildCustomAreaPayload() {
     if (!this.isCustomAreaMode) {
       // Si on repasse en mode existant alors qu'une custom_area existait, on la supprime
       return this.permissionRequest?.custom_area ? null : undefined;
     }
     // Mode custom sans nouveau fichier : on ne touche pas à la custom_area existante
     if (!this.parsedGeoJson) return undefined;
-    return {
-      geojson: this.parsedGeoJson,
-      area_name: (rawValue.custom_area_name ?? '').trim() || null,
-    };
+    return { geojson: this.parsedGeoJson, file_name: this.selectedGeoJsonFileName };
   }
 
   // //////////////////////////////////////////////////////////////////////////
@@ -307,9 +299,6 @@ export class PermissionRequestFormComponent {
 
     if (rawValue.area_mode === 'custom') {
       if (this.parsedGeoJson) return false; // nouveau fichier chargé
-      const savedName = this.permissionRequest.custom_area?.area_name ?? null;
-      const currentName = (rawValue.custom_area_name ?? '').trim() || null;
-      if (savedName !== currentName) return false;
     } else {
       const selectedAreas = this._extractAreaIdentifiers(rawValue.areas).sort((a, b) => a - b);
       const savedAreas = (this.permissionRequest.areas ?? [])
@@ -355,7 +344,6 @@ export class PermissionRequestFormComponent {
         taxon_search: '',
         areas: [],
         area_mode: 'existing' as AreaMode,
-        custom_area_name: null,
       });
       this.selectedAreasDefaultItems = [];
     } else {
@@ -371,12 +359,12 @@ export class PermissionRequestFormComponent {
         taxa: (this.permissionRequest.taxa ?? []).map((taxon) => ({
           cd_nom: taxon.cd_nom,
           lb_nom: taxon.lb_nom,
-          displayName: taxon.lb_nom,
+          nom_valide: taxon.nom_valide,
+          displayName: taxon.nom_valide ?? taxon.lb_nom,
         })),
         taxon_search: '',
         areas: (this.permissionRequest.areas ?? []).map((area) => area.id_area),
         area_mode: savedMode,
-        custom_area_name: this.permissionRequest.custom_area?.area_name ?? null,
       });
       this.selectedAreasDefaultItems = (this.permissionRequest.areas ?? []).map((area) => ({
         id_area: area.id_area,
@@ -400,7 +388,6 @@ export class PermissionRequestFormComponent {
   get taxaControl() { return this.form.get('taxa'); }
   get taxonSearchControl() { return this.form.get('taxon_search'); }
   get areasControl() { return this.form.get('areas'); }
-  get customAreaNameControl() { return this.form.get('custom_area_name'); }
 
   // //////////////////////////////////////////////////////////////////////////
   // Taxa / Area extraction
@@ -433,8 +420,9 @@ export class PermissionRequestFormComponent {
   }
 
   onTaxonSelected(event: NgbTypeaheadSelectItemEvent<Taxon>): void {
+    event.preventDefault();
     const item = event.item;
-    if (!item || item.cd_nom == null) return;
+    if (!item || item.cd_nom == null) { this._resetTaxonSearchControl(); return; }
     const cd_ref = Number(item.cd_ref);
     if (!Number.isFinite(cd_ref)) { this._resetTaxonSearchControl(); return; }
     const currentTaxa = (this.taxaControl?.value as any[]) ?? [];
@@ -461,8 +449,6 @@ export class PermissionRequestFormComponent {
   }
 
   private _resetTaxonSearchControl(): void {
-    this.taxonSearchControl?.setValue('', { emitEvent: false });
-    this.taxonSearchControl?.markAsPristine();
-    this.taxonSearchControl?.markAsUntouched();
+    this.taxonSearchControl?.reset();
   }
 }

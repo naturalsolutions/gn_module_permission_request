@@ -16,7 +16,7 @@ export type PermissionRequestResponse = PermissionRequest;
 
 export interface CustomAreaPayload {
   geojson: object;
-  area_name?: string | null;
+  file_name?: string | null;
 }
 
 export interface PermissionRequestPayload {
@@ -115,5 +115,9 @@ export class PermissionRequestService {
     return this._http.get<object>(
       `${this._config.API_ENDPOINT}/${this._moduleService.currentModule.module_url}/${id_permission_request}/map-data`
     );
+  }
+
+  getCustomAreaDownloadUrl(id_permission_request: number): string {
+    return `${this._config.API_ENDPOINT}/${this._moduleService.currentModule.module_url}/${id_permission_request}/custom-area/download`;
   }
 }

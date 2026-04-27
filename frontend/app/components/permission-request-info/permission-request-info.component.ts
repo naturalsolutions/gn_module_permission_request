@@ -61,6 +61,13 @@ export class PermissionRequestInfoComponent implements OnChanges {
       .subscribe({ next: (data) => { this.mapGeojson = data; } });
   }
 
+  getCustomAreaDownloadUrl(): string | null {
+    if (!this.permissionRequest?.custom_area) return null;
+    return this._permissionRequestService.getCustomAreaDownloadUrl(
+      this.permissionRequest.id_permission_request
+    );
+  }
+
   getScopeLabel(scope: PermissionRequestScope | null): string {
     if (!scope) return this.scopeLabels[DEFAULT_SCOPE];
     return scope in this.scopeLabels ? this.scopeLabels[scope as PermissionRequestScope] : scope;

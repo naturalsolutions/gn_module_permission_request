@@ -120,18 +120,10 @@
                 <pnx-taxonomy id="taxa" [parentFormControl]="taxonSearchControl" charNumber="3" listLength="20"
                   (onChange)="onTaxonSelected($event)"></pnx-taxonomy>
                 <div class="Field__selectedTaxa" *ngIf="taxaControl?.value?.length">
-                  <ul>
-                    <li *ngFor="let taxon of taxaControl?.value">
-                      <span [innerHtml]="taxon.search_name"></span>
-                      <button type="button" mat-icon-button color="warn" (click)="removeTaxon(taxon.cd_nom)"
-                        matTooltip="Retirer ce taxon" aria-label="Retirer ce taxon">
-                        <mat-icon>close</mat-icon>
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-                <div class="Field__error" *ngIf="taxaControl?.hasError('required') && taxaControl?.touched">
-                  Vous devez sélectionner au moins un taxon.
+                  <span class="Chip" *ngFor="let taxon of taxaControl?.value">
+                    {{ taxon.nom_valide || taxon.lb_nom }}
+                    <button type="button" (click)="removeTaxon(taxon.cd_nom)" aria-label="Retirer ce taxon">×</button>
+                  </span>
                 </div>
               </div>
 
@@ -153,53 +145,37 @@
                   </label>
                 </div>
 
-                <ng-container *ngIf="!isCustomAreaMode">
+                <div [hidden]="isCustomAreaMode">
                   <pnx-areas id="areas" [typeCodes]="['COM', 'DEP', 'REG']" [parentFormControl]="areasControl"
                     [defaultItems]="selectedAreasDefaultItems"
                     (onSelectionChange)="onAreasSelectionChange($event)"></pnx-areas>
-                </ng-container>
+                  <div class="Field__error" *ngIf="!isAreaValid && areasControl?.touched">
+                    Vous devez sélectionner au moins une zone géographique.
+                  </div>
+                </div>
 
-                <ng-container *ngIf="isCustomAreaMode">
+                <div [hidden]="!isCustomAreaMode">
                   <div class="Field Field--geojson">
-                    <div *ngIf="permissionRequest?.custom_area && !selectedGeoJsonFile" class="Field__currentFile">
-                      <mat-icon>place</mat-icon>
-                      Zone actuelle :
-                      <strong>{{ permissionRequest.custom_area.area_name || 'Sans nom' }}</strong>
-                      — cliquez ci-dessous pour remplacer le fichier.
+                    <div class="input-group">
+                      <div class="custom-file">
+                        <input
+                          type="file"
+                          class="custom-file-input"
+                          id="geojson_file"
+                          accept=".geojson,.json"
+                          (change)="onGeoJsonFileChange($event)"
+                        />
+                        <label class="custom-file-label" for="geojson_file">
+                          {{ selectedGeoJsonFileName || permissionRequest?.custom_area?.file_name || 'Choisir un fichier' }}
+                        </label>
+                      </div>
                     </div>
-
-                    <label class="Field__label" for="geojson_file">
-                      Fichier GeoJSON
-                      <span *ngIf="!permissionRequest?.custom_area">(obligatoire)</span>
-                    </label>
-                    <input
-                      id="geojson_file"
-                      type="file"
-                      accept=".geojson,.json"
-                      (change)="onGeoJsonFileChange($event)"
-                    />
 
                     <div class="Field__error" *ngIf="geoJsonParseError">
                       {{ geoJsonParseError }}
                     </div>
-                    <div class="Field__success" *ngIf="parsedGeoJson && !geoJsonParseError">
-                      <mat-icon>check_circle</mat-icon>
-                      Fichier GeoJSON valide : {{ selectedGeoJsonFile?.name }}
-                    </div>
-
-                    <div class="Field">
-                      <label class="Field__label" for="custom_area_name">
-                        Nom de la zone (optionnel)
-                      </label>
-                      <input
-                        id="custom_area_name"
-                        type="text"
-                        formControlName="custom_area_name"
-                        placeholder="Ex. : Secteur nord de la Plaine des Cafres"
-                      />
-                    </div>
                   </div>
-                </ng-container>
+                </div>
               </div>
             </div>
             <div class="Field Field--inline-check">
@@ -217,12 +193,16 @@
     </mat-card-content>
   </div>
   <div class="PermissionRequestForm__actions">
+    <div class="PermissionRequestForm__validationWarning" *ngIf="permissionRequest?.validated === true">
+      <mat-icon color="warn">warning</mat-icon>
+      Enregistrer la demande annulera la validation en cours et soumettra la demande à une nouvelle validation.
+    </div>
     <button type="button" mat-stroked-button color="primary" (click)="onReset()"
       [disabled]="form.pristine || isSaving || isSameAsPermissionRequest">
       Réinitialiser
     </button>
     <button type="submit" mat-flat-button color="primary"
-      [disabled]="form.invalid || !isCustomAreaValid || form.pristine || isSaving || isSameAsPermissionRequest">
+      [disabled]="form.invalid || !isAreaValid || form.pristine || isSaving || isSameAsPermissionRequest">
       Enregistrer
     </button>
   </div>

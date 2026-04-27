@@ -27,6 +27,7 @@ class PermissionRequestTaxonSchema(SQLAlchemySchema):
 
     cd_nom = auto_field()
     lb_nom = auto_field()
+    nom_valide = auto_field()
 
 
 class PermissionRequestAreaSchema(SQLAlchemySchema):
@@ -51,8 +52,8 @@ class CustomAreaSchema(SQLAlchemySchema):
 
     id_custom_area = auto_field()
     id_permission_request = auto_field()
-    area_name = auto_field()
     geojson_data = auto_field()
+    file_name = auto_field()
 
 
 class PermissionRequestSchema(CruvedSchemaMixin, SQLAlchemySchema):

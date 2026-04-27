@@ -34,8 +34,8 @@ class CustomArea(DB.Model):
         nullable=True,
         unique=True,
     )
-    area_name = DB.Column(DB.String(255), nullable=True)
     geojson_data = DB.Column(JSONB, nullable=False)
+    file_name = DB.Column(DB.Text, nullable=True)
 
     permission_request = DB.relationship(
         "PermissionRequest",

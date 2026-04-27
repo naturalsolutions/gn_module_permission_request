@@ -96,7 +96,7 @@
           <label for="taxa">Taxons</label>
           <ul id="taxa" class="PermissionRequestInfo__list">
             <li *ngFor="let taxon of permissionRequest.taxa; trackBy: trackByTaxon">
-              {{ taxon.cd_nom }} : {{ taxon.lb_nom }}
+              {{ taxon.nom_valide || taxon.lb_nom }}
             </li>
           </ul>
         </div>
@@ -112,10 +112,12 @@
         </div>
 
         <div class="Field" *ngIf="permissionRequest.custom_area">
-          <label for="custom_area">Zone géographique personnalisée (GeoJSON)</label>
+          <label for="custom_area">Zone géographique personnalisée</label>
           <div id="custom_area" class="PermissionRequestInfo__customArea">
-            <mat-icon>place</mat-icon>
-            {{ permissionRequest.custom_area.area_name || 'Sans nom' }}
+            <mat-icon>description</mat-icon>
+            <a [href]="getCustomAreaDownloadUrl()" download>
+              {{ permissionRequest.custom_area.file_name || 'custom_area.geojson' }}
+            </a>
           </div>
         </div>
 
@@ -137,6 +139,10 @@
             target="_blank" rel="noopener">
             Visualiser dans la synthèse
           </a>
+          <div class="Field__warning" *ngIf="permissionRequest.custom_area">
+            <mat-icon>warning</mat-icon>
+            La zone géographique personnalisée n'est pas prise en compte dans la synthèse.
+          </div>
         </div>
       </mat-card-content>
     </mat-card>

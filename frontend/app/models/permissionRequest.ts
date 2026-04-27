@@ -28,6 +28,7 @@ export interface PermissionRequestRole {
 export interface PermissionRequestTaxon {
   cd_nom: number;
   lb_nom: string;
+  nom_valide: string | null;
 }
 
 export interface PermissionRequestArea {
@@ -40,8 +41,8 @@ export interface PermissionRequestArea {
 export interface PermissionRequestCustomArea {
   id_custom_area: number;
   id_permission_request: number | null;
-  area_name: string | null;
   geojson_data: object;
+  file_name: string | null;
 }
 
 export enum PermissionRequestScope {
