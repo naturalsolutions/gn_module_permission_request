@@ -816,9 +816,12 @@ def create_permission_request():
     created_on_value = datetime.combine(created_on, datetime.min.time())
     expire_on_value = datetime.combine(expiration_date, datetime.min.time())
 
+    allow_custom_area = current_app.config[MODULE_CODE].get("ALLOW_CUSTOM_AREA", False)
     custom_area_value = payload.get("custom_area")
     custom_area = None
     if custom_area_value is not None:
+        if not allow_custom_area:
+            raise BadRequest("Custom area is not allowed.")
         if not isinstance(custom_area_value, dict):
             raise BadRequest("custom_area must be an object with a 'geojson' field.")
         raw_geojson = custom_area_value.get("geojson")
@@ -1040,10 +1043,13 @@ def update_permission_request(scope, id_permission_request):
         ]
 
     if "custom_area" in payload:
+        allow_custom_area = current_app.config[MODULE_CODE].get("ALLOW_CUSTOM_AREA", False)
         custom_area_value = payload.get("custom_area")
         if custom_area_value is None:
             permission_request.custom_area = None
         else:
+            if not allow_custom_area:
+                raise BadRequest("Custom area is not allowed.")
             if not isinstance(custom_area_value, dict):
                 raise BadRequest("custom_area must be an object with a 'geojson' field.")
             raw_geojson = custom_area_value.get("geojson")

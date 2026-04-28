@@ -132,7 +132,7 @@
                   Zones géographiques
                 </label>
 
-                <div class="Field__radio Field__radio--area-mode">
+                <div class="Field__radio Field__radio--area-mode" *ngIf="allowCustomArea">
                   <label>
                     <input type="radio" formControlName="area_mode" value="existing"
                       (change)="onAreaModeChange('existing')" />
@@ -145,7 +145,7 @@
                   </label>
                 </div>
 
-                <div [hidden]="isCustomAreaMode">
+                <div [hidden]="allowCustomArea && isCustomAreaMode">
                   <pnx-areas id="areas" [typeCodes]="['COM', 'DEP', 'REG']" [parentFormControl]="areasControl"
                     [defaultItems]="selectedAreasDefaultItems"
                     (onSelectionChange)="onAreasSelectionChange($event)"></pnx-areas>
@@ -154,7 +154,7 @@
                   </div>
                 </div>
 
-                <div [hidden]="!isCustomAreaMode">
+                <div [hidden]="!allowCustomArea || !isCustomAreaMode">
                   <div class="Field Field--geojson">
                     <div class="input-group">
                       <div class="custom-file">

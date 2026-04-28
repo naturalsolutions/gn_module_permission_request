@@ -66,6 +66,7 @@ type PermissionRequestFormValue = {
 export class PermissionRequestFormComponent {
   isSaving = false;
   readonly shouldDisplayAcknowledgement: boolean;
+  readonly allowCustomArea: boolean;
   readonly PermissionRequestScope = PermissionRequestScope;
   readonly sections = PERMISSION_REQUEST_SECTIONS;
   readonly today = new Date();
@@ -88,6 +89,7 @@ export class PermissionRequestFormComponent {
   ) {
     const moduleConfig = this._configService.PERMISSION_REQUEST ?? {};
     this.shouldDisplayAcknowledgement = !!moduleConfig.REQUIRE_TERMS_ACKNOWLEDGEMENT;
+    this.allowCustomArea = !!moduleConfig.ALLOW_CUSTOM_AREA;
     this._setupValidators();
     this._setupAcknowledgementControl();
   }
