@@ -292,19 +292,20 @@ def _sync_custom_area_to_l_areas(permission_request):
                 },
             )
 
-        # Associer l'area à la permission
+        # Associer l'area à toutes les permissions de la demande
         area = db.session.get(LAreas, id_area)
-        if area is not None and permission_request.permission is not None:
-            current_ids = {a.id_area for a in permission_request.permission.areas_filter}
-            if id_area not in current_ids:
-                permission_request.permission.areas_filter.append(area)
+        if area is not None:
+            for perm in permission_request.permissions:
+                current_ids = {a.id_area for a in perm.areas_filter}
+                if id_area not in current_ids:
+                    perm.areas_filter.append(area)
 
     else:
         # Retirer de areas_filter en premier (supprime cor_permission_area),
         # puis flusher avant de supprimer l_areas (contrainte FK).
-        if permission_request.permission is not None:
-            permission_request.permission.areas_filter = [
-                a for a in permission_request.permission.areas_filter
+        for perm in permission_request.permissions:
+            perm.areas_filter = [
+                a for a in perm.areas_filter
                 if not (getattr(a.area_type, "type_code", None) == _AREA_TYPE_CODE)
             ]
         db.session.flush()
@@ -339,7 +340,8 @@ def map_data(scope, id_permission_request):
     if permission_request.custom_area is not None:
         return permission_request.custom_area.geojson_data
 
-    areas = permission_request.permission.areas_filter if permission_request.permission else []
+    ref = permission_request._ref_permission
+    areas = ref.areas_filter if ref is not None else []
     if not areas:
         return {"type": "FeatureCollection", "features": []}
 
@@ -498,7 +500,7 @@ def list_permission_requests(scope):
 
     if needs_permission_join:
         permission_alias = aliased(Permission)
-        query = query.outerjoin(permission_alias, PermissionRequest.permission)
+        query = query.outerjoin(permission_alias, PermissionRequest.permissions)
 
     needs_scope_join = orderby == "scope" or bool(scope_filters)
     if needs_scope_join:
@@ -595,7 +597,7 @@ def list_permission_requests(scope):
         else:
             clauses = [Permission.sensitivity_filter.is_(value) for value in sensitivity_set]
             query = query.where(
-                sa.or_(*[PermissionRequest.permission.has(clause) for clause in clauses])
+                sa.or_(*[PermissionRequest.permissions.any(clause) for clause in clauses])
             )
 
     if validated_filters:
@@ -616,7 +618,7 @@ def list_permission_requests(scope):
                 else:
                     clauses.append(Permission.validated.is_(validated_value))
             query = query.where(
-                sa.or_(*[PermissionRequest.permission.has(clause) for clause in clauses])
+                sa.or_(*[PermissionRequest.permissions.any(clause) for clause in clauses])
             )
 
     if my_validations:
@@ -789,22 +791,6 @@ def create_permission_request():
         author_organism_id=author_organism_id,
     )
 
-    module_id = db.session.scalars(
-        select(TModules.id_module).where(TModules.module_code == "SYNTHESE")
-    ).one_or_none()
-    if module_id is None:
-        module_id = db.session.scalars(
-            select(TModules.id_module).where(TModules.module_label == "Synthèse")
-        ).one_or_none()
-    if module_id is None:
-        raise InternalServerError("Synthèse module not found in permissions configuration.")
-
-    read_action_id = db.session.scalars(
-        select(PermAction.id_action).where(PermAction.code_action == "R")
-    ).one_or_none()
-    if read_action_id is None:
-        raise InternalServerError("Read action (code 'R') not found in permissions configuration.")
-
     object_id = db.session.scalars(
         select(PermObject.id_object).where(PermObject.code_object == "ALL")
     ).one_or_none()
@@ -821,7 +807,7 @@ def create_permission_request():
     custom_area = None
     if custom_area_value is not None:
         if not allow_custom_area:
-            raise BadRequest("Custom area is not allowed.")
+            raise BadRequest("Custom area is not allowed by the module configuration.")
         if not isinstance(custom_area_value, dict):
             raise BadRequest("custom_area must be an object with a 'geojson' field.")
         raw_geojson = custom_area_value.get("geojson")
@@ -834,6 +820,34 @@ def create_permission_request():
     if not areas_list and custom_area is None:
         raise BadRequest("At least one area or a custom GeoJSON area is required.")
 
+    permissions_to_create = current_app.config[MODULE_CODE].get("PERMISSIONS_TO_CREATE", [])
+    if not permissions_to_create:
+        raise InternalServerError("PERMISSIONS_TO_CREATE is empty in module configuration.")
+
+    # Resolve module/action ids once per unique (module_code, action_code) pair
+    _module_id_cache = {}
+    _action_id_cache = {}
+
+    def _get_module_id(module_code):
+        if module_code not in _module_id_cache:
+            mid = db.session.scalars(
+                select(TModules.id_module).where(TModules.module_code == module_code)
+            ).one_or_none()
+            if mid is None:
+                raise InternalServerError(f"Module '{module_code}' not found in configuration.")
+            _module_id_cache[module_code] = mid
+        return _module_id_cache[module_code]
+
+    def _get_action_id(action_code):
+        if action_code not in _action_id_cache:
+            aid = db.session.scalars(
+                select(PermAction.id_action).where(PermAction.code_action == action_code)
+            ).one_or_none()
+            if aid is None:
+                raise InternalServerError(f"Action '{action_code}' not found in configuration.")
+            _action_id_cache[action_code] = aid
+        return _action_id_cache[action_code]
+
     permission_request = PermissionRequest(
         id_author=current_user.id_role,
         id_validator=None,
@@ -842,28 +856,24 @@ def create_permission_request():
     if custom_area is not None:
         permission_request.custom_area = custom_area
 
-    permission = Permission(
-        id_role=permission_role_id,
-        id_action=read_action_id,
-        id_module=module_id,
-        id_object=object_id,
-        scope_value=None,
-        sensitivity_filter=sensitivity_filter_value,
-        created_on=created_on_value,
-        expire_on=expire_on_value,
-        validated=None,
-    )
-    permission.taxons_filter = list(taxa_list)
-    permission.areas_filter = list(areas_list)
-
-    permission_request.permission = permission
-
-    desired_validated = permission.validated
+    for perm_def in permissions_to_create:
+        perm = Permission(
+            id_role=permission_role_id,
+            id_action=_get_action_id(perm_def["action"]),
+            id_module=_get_module_id(perm_def["module"]),
+            id_object=object_id,
+            scope_value=None,
+            sensitivity_filter=sensitivity_filter_value,
+            created_on=created_on_value,
+            expire_on=expire_on_value,
+            validated=None,
+        )
+        perm.taxons_filter = list(taxa_list)
+        perm.areas_filter = list(areas_list)
+        permission_request.permissions.append(perm)
 
     db.session.add(permission_request)
     db.session.flush()
-    if permission.validated != desired_validated:
-        permission.validated = desired_validated
 
     db.session.commit()
 
@@ -965,13 +975,14 @@ def update_permission_request(scope, id_permission_request):
             author_role_id=author.id_role,
             author_organism_id=author.id_organisme,
         )
-        permission_request.permission.id_role = new_role_id
+        for perm in permission_request.permissions:
+            perm.id_role = new_role_id
 
     if "sensitivity_filter" in payload:
         sensitivity_value = payload.get("sensitivity_filter")
         if not isinstance(sensitivity_value, bool):
             raise BadRequest("sensitivity_filter must be a boolean value.")
-        if permission_request.permission is None:
+        if not permission_request.permissions:
             raise InternalServerError("No permission is linked to this permission request.")
         permission_request.sensitivity_filter = sensitivity_value
 
@@ -993,7 +1004,7 @@ def update_permission_request(scope, id_permission_request):
             raise BadRequest(
                 f"Some taxa identifiers are invalid or unknown: {', '.join(map(str, missing_taxa))}."
             )
-        if permission_request.permission is None:
+        if not permission_request.permissions:
             raise InternalServerError("No permission is linked to this permission request.")
         permission_request.taxa = [taxa_by_id[taxon_id] for taxon_id in normalized_taxa_ids]
 
@@ -1036,11 +1047,11 @@ def update_permission_request(scope, id_permission_request):
             raise BadRequest(
                 f"Areas must belong to one of the allowed types ({allowed_codes}). Invalid areas: {', '.join(map(str, invalid_area_types))}."
             )
-        if permission_request.permission is None:
+        if not permission_request.permissions:
             raise InternalServerError("No permission is linked to this permission request.")
-        permission_request.permission.areas_filter = [
-            areas_by_id[area_id] for area_id in normalized_area_ids
-        ]
+        new_areas = [areas_by_id[area_id] for area_id in normalized_area_ids]
+        for perm in permission_request.permissions:
+            perm.areas_filter = list(new_areas)
 
     if "custom_area" in payload:
         allow_custom_area = current_app.config[MODULE_CODE].get("ALLOW_CUSTOM_AREA", False)
@@ -1064,9 +1075,8 @@ def update_permission_request(scope, id_permission_request):
             else:
                 permission_request.custom_area = new_custom_area
 
-    has_areas = bool(
-        permission_request.permission and permission_request.permission.areas_filter
-    )
+    ref = permission_request._ref_permission
+    has_areas = bool(ref and ref.areas_filter)
     if not has_areas and permission_request.custom_area is None:
         raise BadRequest("At least one area or a custom GeoJSON area is required.")
 
@@ -1166,7 +1176,7 @@ def update_validated(scope, id_permission_request):
     if current_user is None or not hasattr(current_user, "id_role"):
         raise Forbidden("Current user context is missing.")
 
-    if permission_request.permission is None:
+    if not permission_request.permissions:
         raise InternalServerError("No permission is linked to this permission request.")
 
     reset_payload = len(payload) == 0

@@ -77,12 +77,13 @@ class PermissionRequestSchema(CruvedSchemaMixin, SQLAlchemySchema):
     description = auto_field()
     validation_description = auto_field(dump_only=True)
     taxa = fields.Nested(PermissionRequestTaxonSchema, many=True, dump_only=True)
-    areas = fields.Nested(
-        PermissionRequestAreaSchema,
-        many=True,
-        attribute="permission.areas_filter",
-        dump_only=True,
-    )
+    areas = fields.Method("get_areas", dump_only=True)
+
+    def get_areas(self, obj):
+        ref = obj._ref_permission
+        if ref is None:
+            return []
+        return PermissionRequestAreaSchema(many=True).dump(ref.areas_filter)
     custom_area = fields.Nested(CustomAreaSchema, allow_none=True, dump_only=True)
     author = fields.Nested(PermissionRequestUserSchema, dump_only=True)
     validator = fields.Nested(PermissionRequestUserSchema, dump_only=True)
