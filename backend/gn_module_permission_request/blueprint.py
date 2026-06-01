@@ -875,6 +875,12 @@ def create_permission_request():
     db.session.add(permission_request)
     db.session.flush()
 
+    # Force validated=NULL: server_default=true s'appliquerait sinon en cas
+    # d'INSERT sans valeur explicite côté SQLAlchemy.
+    for perm in permission_request.permissions:
+        perm.validated = None
+    db.session.flush()
+
     db.session.commit()
 
     notifications_role_ids = _get_validator_role_ids()
