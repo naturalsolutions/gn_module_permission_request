@@ -21,6 +21,7 @@ export interface CustomAreaPayload {
 
 export interface PermissionRequestPayload {
   description: string | null;
+  start_on: string | null;
   expiration_date: string;
   scope: PermissionRequestScope;
   sensitivity_filter?: boolean;

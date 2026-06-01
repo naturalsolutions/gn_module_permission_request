@@ -70,20 +70,24 @@
           <mat-card-content class="Card__content">
             <div class="Dates">
               <div class="Field">
-                <label class="Field__label">
-                  Date de creation
+                <label class="Field__label" for="start_on">
+                  Date de démarrage
                 </label>
-                <label>
-                  {{ (permissionRequest?.created_on || today) | date: 'dd/MM/yyyy' }}
-                </label>
+                <pnx-date id="start_on" [defaultToday]="true" [minDate]="todayDateStruct"
+                  [parentFormControl]="startOnControl" [noMaxDate]="true"></pnx-date>
+                <div class="Field__error" *ngIf="
+                    startOnControl?.hasError('required') && startOnControl?.touched
+                  ">
+                  La date de démarrage est obligatoire.
+                </div>
               </div>
 
               <div class="Field">
                 <label class="Field__label" for="expiration_date">
                   Date d'expiration
                 </label>
-                <pnx-date id="expiration_date" [defaultToday]="true" [parentFormControl]="expirationDateControl"
-                  [noMaxDate]="true"></pnx-date>
+                <pnx-date id="expiration_date" [defaultToday]="true" [minDate]="todayDateStruct"
+                  [parentFormControl]="expirationDateControl" [noMaxDate]="true"></pnx-date>
                 <div class="Field__error" *ngIf="
                     expirationDateControl?.hasError('required') && expirationDateControl?.touched
                   ">
@@ -94,9 +98,9 @@
 
             <div class="Field__error" *ngIf="
                 form.errors?.invalidDate &&
-                (createdOnControl?.touched || expirationDateControl?.touched)
+                (startOnControl?.touched || expirationDateControl?.touched)
               ">
-              La date de creation doit etre anterieure a la date d'expiration.
+              La date de démarrage doit être antérieure ou égale à la date d'expiration.
             </div>
           </mat-card-content>
         </mat-card>

@@ -38,6 +38,7 @@ export type AreaMode = 'existing' | 'custom';
 
 type PermissionRequestFormValue = {
   description: string | null;
+  start_on: NgbDateStruct | string | null;
   expiration_date: NgbDateStruct | string | null;
   sensitivity_filter: boolean;
   scope: PermissionRequestScope;
@@ -70,6 +71,11 @@ export class PermissionRequestFormComponent {
   readonly PermissionRequestScope = PermissionRequestScope;
   readonly sections = PERMISSION_REQUEST_SECTIONS;
   readonly today = new Date();
+  readonly todayDateStruct: NgbDateStruct = {
+    year: this.today.getFullYear(),
+    month: this.today.getMonth() + 1,
+    day: this.today.getDate(),
+  };
   selectedAreasDefaultItems: Array<{ id_area: number; area_name: string; displayName: string }> =
     [];
 
@@ -126,6 +132,7 @@ export class PermissionRequestFormComponent {
   private _buildForm(): FormGroup {
     return this._formBuilder.group({
       description: [''],
+      start_on: [null, [Validators.required]],
       expiration_date: [null, [Validators.required]],
       scope: [DEFAULT_SCOPE, [Validators.required]],
       sensitivity_filter: [true],
@@ -138,10 +145,10 @@ export class PermissionRequestFormComponent {
   }
 
   private _setupValidators(): void {
-    const initControl = this.createdOnControl;
+    const startControl = this.startOnControl;
     const expirationControl = this.expirationDateControl;
-    if (initControl && expirationControl) {
-      this.form.setValidators(this._formService.dateValidator(initControl, expirationControl));
+    if (startControl && expirationControl) {
+      this.form.setValidators(this._formService.dateValidator(startControl, expirationControl));
       this.form.updateValueAndValidity({ emitEvent: false });
     }
   }
@@ -224,11 +231,15 @@ export class PermissionRequestFormComponent {
     this.isSaving = true;
 
     const rawValue = this.form.value as PermissionRequestFormValue & {
+      start_on: NgbDateStruct | null;
       expiration_date: NgbDateStruct;
     };
 
     const payload: PermissionRequestPayload = {
       description: rawValue.description?.trim() || null,
+      start_on: rawValue.start_on
+        ? (this._dateParser.format(rawValue.start_on) as unknown as string)
+        : null,
       expiration_date: this._dateParser.format(rawValue.expiration_date) as unknown as string,
       taxa: this._extractTaxaIdentifiers(rawValue.taxa),
       areas: this.isCustomAreaMode ? [] : this._extractAreaIdentifiers(rawValue.areas),
@@ -275,6 +286,10 @@ export class PermissionRequestFormComponent {
     const normalizedDescription = (rawValue.description ?? '').trim();
     const permissionRequestDescription = (this.permissionRequest.description ?? '').trim();
     if (normalizedDescription !== permissionRequestDescription) return false;
+
+    const normalizedStart = this._normalizeDateValue(rawValue.start_on);
+    if (normalizedStart !== this._normalizeDateValue(this.permissionRequest.start_on))
+      return false;
 
     const normalizedExpiration = this._normalizeDateValue(rawValue.expiration_date);
     if (normalizedExpiration !== this._normalizeDateValue(this.permissionRequest.expiration_date))
@@ -335,6 +350,7 @@ export class PermissionRequestFormComponent {
     if (!this.permissionRequest) {
       this.form.reset({
         description: '',
+        start_on: { ...this.todayDateStruct },
         expiration_date: null,
         scope: DEFAULT_SCOPE,
         sensitivity_filter: true,
@@ -349,6 +365,9 @@ export class PermissionRequestFormComponent {
       const savedMode: AreaMode = this.permissionRequest.custom_area ? 'custom' : 'existing';
       this.form.patchValue({
         description: this.permissionRequest.description,
+        start_on: this.permissionRequest.start_on
+          ? this._dateParser.parse(this.permissionRequest.start_on)
+          : null,
         expiration_date: this.permissionRequest.expiration_date
           ? this._dateParser.parse(this.permissionRequest.expiration_date)
           : null,
@@ -380,7 +399,7 @@ export class PermissionRequestFormComponent {
   // //////////////////////////////////////////////////////////////////////////
 
   get expirationDateControl() { return this.form.get('expiration_date'); }
-  get createdOnControl() { return this.form.get('created_on'); }
+  get startOnControl() { return this.form.get('start_on'); }
   get acknowledgeTermsControl() { return this.form.get('acknowledgeTerms'); }
   get scopeControl() { return this.form.get('scope'); }
   get sensitivityFilterControl() { return this.form.get('sensitivity_filter'); }

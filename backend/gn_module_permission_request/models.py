@@ -227,6 +227,41 @@ class PermissionRequest(DB.Model):
         )
 
     @hybrid_property
+    def start_on(self):
+        ref = self._ref_permission
+        if ref is None or ref.start_on is None:
+            return None
+        return ref.start_on.date()
+
+    @start_on.setter
+    def start_on(self, value):
+        if not self.permissions:
+            raise AttributeError("No permission is linked to this permission request.")
+        for perm in self.permissions:
+            if value is None:
+                perm.start_on = None
+            elif isinstance(value, datetime):
+                perm.start_on = value
+            else:
+                perm.start_on = datetime.combine(value, datetime.min.time())
+
+    @start_on.expression
+    def start_on(cls):
+        return (
+            sa.select(sa.func.date(Permission.start_on))
+            .where(
+                Permission.id_permission == sa.select(
+                    sa.func.min(
+                        sa.select(_cor_permission_request_permission.c.id_permission)
+                        .where(_cor_permission_request_permission.c.id_permission_request == cls.id_permission_request)
+                        .scalar_subquery()
+                    )
+                ).scalar_subquery()
+            )
+            .scalar_subquery()
+        )
+
+    @hybrid_property
     def expiration_date(self):
         ref = self._ref_permission
         if ref is None or ref.expire_on is None:

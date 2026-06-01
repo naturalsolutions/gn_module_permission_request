@@ -70,6 +70,7 @@ class PermissionRequestSchema(CruvedSchemaMixin, SQLAlchemySchema):
     id_author = auto_field()
     id_validator = auto_field()
     created_on = fields.Date(attribute="created_on", dump_only=True)
+    start_on = fields.Date(attribute="start_on", allow_none=True, dump_only=True)
     expiration_date = fields.Date(attribute="expiration_date", dump_only=True)
     validated = fields.Boolean(attribute="validated", allow_none=True, dump_only=True)
     validation_date = fields.DateTime(attribute="validation_date", allow_none=True, dump_only=True)

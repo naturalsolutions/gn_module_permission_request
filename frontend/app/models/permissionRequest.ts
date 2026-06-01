@@ -5,6 +5,7 @@ export interface PermissionRequest {
   id_author: number;
   id_validator: number | null;
   created_on: string | null;
+  start_on: string | null;
   expiration_date: string | null;
   validated: boolean | null;
   sensitivity_filter: boolean;

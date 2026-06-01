@@ -683,6 +683,7 @@ def create_permission_request():
 
     allowed_fields = {
         "description",
+        "start_on",
         "expiration_date",
         "taxa",
         "areas",
@@ -700,9 +701,26 @@ def create_permission_request():
         expiration_date = datetime.strptime(expiration_value, "%Y-%m-%d").date()
     except ValueError as exc:
         raise BadRequest("expiration_date must follow the YYYY-MM-DD format.") from exc
-    created_on = date.today()
-    if created_on > expiration_date:
-        raise BadRequest("expiration_date must be on or after today's date.")
+
+    # Date de démarrage : optionnelle, stockée dans Permission.start_on. La
+    # permission ne devient active qu'à partir de cette date (cf.
+    # Permission.active_filter). Si absente (null), la permission est active dès
+    # sa validation. Sinon elle doit être aujourd'hui ou ultérieure, et <= date
+    # d'expiration.
+    today = date.today()
+    start_value = payload.get("start_on")
+    start_on = None
+    if start_value is not None:
+        if not isinstance(start_value, str):
+            raise BadRequest("start_on must be a string (YYYY-MM-DD) or null.")
+        try:
+            start_on = datetime.strptime(start_value, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise BadRequest("start_on must follow the YYYY-MM-DD format.") from exc
+        if start_on < today:
+            raise BadRequest("start_on must be on or after today's date.")
+        if start_on > expiration_date:
+            raise BadRequest("expiration_date must be on or after start_on.")
 
     description_value = payload.get("description")
     if description_value is not None and not isinstance(description_value, str):
@@ -799,7 +817,9 @@ def create_permission_request():
             "Permission object 'ALL' not found in permissions configuration."
         )
 
-    created_on_value = datetime.combine(created_on, datetime.min.time())
+    start_on_value = (
+        datetime.combine(start_on, datetime.min.time()) if start_on is not None else None
+    )
     expire_on_value = datetime.combine(expiration_date, datetime.min.time())
 
     allow_custom_area = current_app.config[MODULE_CODE].get("ALLOW_CUSTOM_AREA", False)
@@ -864,7 +884,7 @@ def create_permission_request():
             id_object=object_id,
             scope_value=None,
             sensitivity_filter=sensitivity_filter_value,
-            created_on=created_on_value,
+            start_on=start_on_value,
             expire_on=expire_on_value,
             validated=None,
         )
@@ -921,6 +941,7 @@ def update_permission_request(scope, id_permission_request):
 
     allowed_fields = {
         "description",
+        "start_on",
         "expiration_date",
         "taxa",
         "areas",
@@ -949,6 +970,20 @@ def update_permission_request(scope, id_permission_request):
     if "description" in payload:
         permission_request.description = payload.get("description")
 
+    if "start_on" in payload:
+        start_value = payload.get("start_on")
+        if start_value is None:
+            # null efface la date de démarrage : la permission redevient active
+            # dès sa validation.
+            permission_request.start_on = None
+        elif not isinstance(start_value, str):
+            raise BadRequest("start_on must be a string in YYYY-MM-DD format or null.")
+        else:
+            try:
+                permission_request.start_on = datetime.strptime(start_value, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise BadRequest("start_on must be a valid date in YYYY-MM-DD format.") from exc
+
     if "expiration_date" in payload:
         expiration_value = payload.get("expiration_date")
         if not isinstance(expiration_value, str):
@@ -960,12 +995,12 @@ def update_permission_request(scope, id_permission_request):
         except ValueError as exc:
             raise BadRequest("expiration_date must be a valid date in YYYY-MM-DD format.") from exc
     if (
-        ("created_on" in payload or "expiration_date" in payload)
-        and permission_request.created_on is not None
+        ("start_on" in payload or "expiration_date" in payload)
+        and permission_request.start_on is not None
         and permission_request.expiration_date is not None
     ):
-        if permission_request.created_on > permission_request.expiration_date:
-            raise BadRequest("created_on must be before or equal to expiration_date.")
+        if permission_request.start_on > permission_request.expiration_date:
+            raise BadRequest("start_on must be before or equal to expiration_date.")
 
     if "scope" in payload:
         raw_scope = payload.get("scope")

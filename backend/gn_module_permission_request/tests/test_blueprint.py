@@ -108,6 +108,7 @@ def create_permission_request(
             validated=validated,
         )
         permission.created_on = datetime.combine(created_on, datetime.min.time())
+        permission.start_on = datetime.combine(created_on, datetime.min.time())
         permission.expire_on = datetime.combine(expiration, datetime.min.time())
         permission.taxons_filter = list(taxa)
         permission.areas_filter = list(areas)
@@ -197,6 +198,7 @@ def test_create_permission_request_success(client, users, taxon_ids, area_ids):
     expiration = created_on + timedelta(days=90)
     payload = {
         "description": "Created through API",
+        "start_on": created_on.isoformat(),
         "expiration_date": expiration.isoformat(),
         "taxa": taxon_ids[:2],
         "sensitivity_filter": True,
@@ -211,6 +213,7 @@ def test_create_permission_request_success(client, users, taxon_ids, area_ids):
     assert data["description"] == payload["description"]
     assert data["id_author"] == users["admin_user"].id_role
     assert data["created_on"] == created_on.isoformat()
+    assert data["start_on"] == created_on.isoformat()
     created = db.session.get(PermissionRequest, data["id_permission_request"])
     assert created is not None
     assert created.permissions
@@ -218,10 +221,32 @@ def test_create_permission_request_success(client, users, taxon_ids, area_ids):
     assert sorted(area.id_area for area in created._ref_permission.areas_filter) == sorted(area_ids[:2])
 
 
+def test_create_permission_request_without_start_on(client, users, taxon_ids, area_ids):
+    """start_on est optionnelle : absente, la permission est créée avec
+    start_on=NULL (active dès validation)."""
+    today = date.today()
+    payload = {
+        "description": "No start date",
+        "expiration_date": (today + timedelta(days=30)).isoformat(),
+        "taxa": taxon_ids[:2],
+        "areas": area_ids[:2],
+    }
+
+    with logged_user(client, users["admin_user"]):
+        response = client.post("/permission_request/", json=payload)
+
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["start_on"] is None
+    created = db.session.get(PermissionRequest, data["id_permission_request"])
+    assert created._ref_permission.start_on is None
+
+
 def test_create_permission_request_rejects_invalid_taxa(client, users):
     created_on = date.today()
     payload = {
         "description": "Invalid taxa",
+        "start_on": created_on.isoformat(),
         "expiration_date": (created_on + timedelta(days=30)).isoformat(),
         "taxa": [999999999],
     }
@@ -236,6 +261,7 @@ def test_create_permission_request_rejects_invalid_areas(client, users, taxon_id
     created_on = date.today()
     payload = {
         "description": "Invalid areas",
+        "start_on": created_on.isoformat(),
         "expiration_date": (created_on + timedelta(days=30)).isoformat(),
         "taxa": taxon_ids[:2],
         "areas": [999999999],
